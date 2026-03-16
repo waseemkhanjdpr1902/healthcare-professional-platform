@@ -31,8 +31,8 @@ st.markdown("""
 # SUPABASE CLIENT (no cache → fixes serialization error)
 # ────────────────────────────────────────────────
 if "supabase" not in st.session_state:
-    url: str = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
-    key: str = st.secrets["connections"]["supabase"]["SUPABASE_KEY"]
+    url: str = st.secrets["connections"]["supabase"]["https://sspruywktrnvyccsbadk.supabase.co"]
+    key: str = st.secrets["connections"]["supabase"]["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzcHJ1eXdrdHJudnljY3NiYWRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0Mzk1MjMsImV4cCI6MjA4ODAxNTUyM30.zqXBks-EIcONnzU-NxhqliOy3c6t0IGIckn5wFQ43AU"]
     st.session_state.supabase = create_client(url, key)
 
 supabase: Client = st.session_state.supabase
