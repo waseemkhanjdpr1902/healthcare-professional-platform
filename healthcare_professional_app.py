@@ -1,135 +1,164 @@
 import streamlit as st
-import pandas as pd
-from datetime import datetime
-import plotly.express as px
-from st_supabase_connection import SupabaseConnection
+from supabase import create_client, Client
 import openai
 from PyPDF2 import PdfReader
 import docx
 from io import BytesIO
+import pandas as pd
+from datetime import datetime
+import plotly.express as px
 
-# ====================== CONFIG ======================
-st.set_page_config(page_title="MedPro Hub", page_icon="🩺", layout="wide")
+# ────────────────────────────────────────────────
+# PAGE CONFIG & CSS (professional medical look)
+# ────────────────────────────────────────────────
+st.set_page_config(
+    page_title="MedPro Hub",
+    page_icon="🩺",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Beautiful Medical CSS
 st.markdown("""
 <style>
-    .main-header { font-size: 3rem; background: linear-gradient(90deg,#2563eb,#0ea5e9); -webkit-background-clip:text; -webkit-text-fill-color:transparent; font-weight:700; }
-    .card { background:white; padding:25px; border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,0.08); border:1px solid #f1f5f9; }
-    .stButton>button { background:#2563eb; color:white; border-radius:12px; font-weight:600; height:3em; }
-    .metric-card { background:linear-gradient(135deg,#2563eb,#0ea5e9); color:white; padding:20px; border-radius:16px; text-align:center; }
+    .main-header { font-size: 3rem; background: linear-gradient(90deg, #2563eb, #0ea5e9); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; text-align: center; }
+    .card { background: white; padding: 1.8rem; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; margin-bottom: 1.5rem; }
+    .metric-card { background: linear-gradient(135deg, #2563eb, #0ea5e9); color: white; padding: 1.5rem; border-radius: 12px; text-align: center; }
+    .stButton > button { background: #2563eb !important; color: white !important; border-radius: 10px !important; font-weight: 600 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ====================== SUPABASE CONNECTION ======================
-def get_supabase():
-    return st.connection("supabase", type=SupabaseConnection)
-conn = get_supabase()
+# ────────────────────────────────────────────────
+# SUPABASE CLIENT (no cache → fixes serialization error)
+# ────────────────────────────────────────────────
+if "supabase" not in st.session_state:
+    url: str = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
+    key: str = st.secrets["connections"]["supabase"]["SUPABASE_KEY"]
+    st.session_state.supabase = create_client(url, key)
 
-# ====================== SESSION STATE ======================
+supabase: Client = st.session_state.supabase
+
+# ────────────────────────────────────────────────
+# SESSION STATE
+# ────────────────────────────────────────────────
 if "user" not in st.session_state:
     st.session_state.user = None
-if "cme_data" not in st.session_state:
-    st.session_state.cme_data = pd.DataFrame()
-if "cv_data" not in st.session_state:
-    st.session_state.cv_data = {}
+if "page" not in st.session_state:
+    st.session_state.page = "Home"
 
-# ====================== SIDEBAR (Auth + Navigation) ======================
+# ────────────────────────────────────────────────
+# SIDEBAR – Login / Navigation
+# ────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("<h2 style='text-align:center;color:#2563eb;'>🩺 MedPro Hub</h2>", unsafe_allow_html=True)
-    
+    st.markdown("<h2 style='text-align:center; color:#2563eb;'>🩺 MedPro Hub</h2>", unsafe_allow_html=True)
+    st.caption("Tools for Healthcare Professionals")
+
     if st.session_state.user:
-        st.success(f"Logged in as {st.session_state.user.email}")
-        if st.button("Logout", type="secondary"):
-            conn.auth.sign_out()
+        st.success(f"Signed in as {st.session_state.user.email}")
+        if st.button("Sign Out"):
             st.session_state.user = None
             st.rerun()
-        
-        xai_key = st.text_input("xAI Grok API Key", type="password", value=st.secrets.get("XAI_API_KEY", ""))
-        if xai_key:
-            client = openai.OpenAI(api_key=xai_key, base_url="https://api.x.ai/v1")
-        else:
-            client = None
-        
-        page = st.radio("Menu", ["🏠 Dashboard", "📊 CME Tracker", "📝 CV Builder", "🔍 ATS Checker", "🤖 AI Advisor"])
-    else:
-        st.info("Please log in")
-        tab1, tab2 = st.tabs(["Login", "Sign Up"])
-        with tab1:
-            email = st.text_input("Email")
-            pw = st.text_input("Password", type="password")
-            if st.button("Login"):
-                try:
-                    res = conn.auth.sign_in_with_password({"email": email, "password": pw})
-                    st.session_state.user = res.user
-                    st.success("Logged in!")
-                    st.rerun()
-                except:
-                    st.error("Invalid credentials")
-        with tab2:
-            email_s = st.text_input("Email", key="signup_email")
-            pw_s = st.text_input("Password", type="password", key="signup_pw")
-            if st.button("Create Account"):
-                try:
-                    res = conn.auth.sign_up({"email": email_s, "password": pw_s})
-                    st.success("Account created! Check your email to confirm.")
-                except Exception as e:
-                    st.error(str(e))
 
-# ====================== PROTECTED PAGES ======================
+        xai_key = st.text_input("xAI Grok API Key", type="password")
+        client = openai.OpenAI(api_key=xai_key, base_url="https://api.x.ai/v1") if xai_key else None
+
+        st.session_state.page = st.radio("Go to", ["Home", "CME Tracker", "CV Builder", "ATS Checker", "AI Advisor"])
+    else:
+        st.info("Sign in to continue")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Sign In"):
+                try:
+                    res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                    if res.user:
+                        st.session_state.user = res.user
+                        st.rerun()
+                    else:
+                        st.error("Login failed")
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+        with col2:
+            if st.button("Sign Up"):
+                try:
+                    res = supabase.auth.sign_up({"email": email, "password": password})
+                    st.success("Check your email to confirm account")
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+
 if not st.session_state.user:
-    st.warning("Please log in from the sidebar to continue")
     st.stop()
 
 user_id = st.session_state.user.id
 
-# ====================== DASHBOARD ======================
-if page == "🏠 Dashboard":
-    st.markdown('<h1 class="main-header">Welcome back, Doctor</h1>', unsafe_allow_html=True)
-    col1, col2, col3 = st.columns(3)
-    with col1: st.markdown('<div class="metric-card"><h3>Total CME</h3><h2>42.5</h2></div>', unsafe_allow_html=True)
-    with col2: st.markdown('<div class="metric-card"><h3>ATS Score</h3><h2>92%</h2></div>', unsafe_allow_html=True)
-    with col3: st.markdown('<div class="metric-card"><h3>AI Advisor</h3><h2>Ready</h2></div>', unsafe_allow_html=True)
+# ────────────────────────────────────────────────
+# PAGES
+# ────────────────────────────────────────────────
+if st.session_state.page == "Home":
+    st.markdown('<h1 class="main-header">MedPro Hub</h1>', unsafe_allow_html=True)
+    st.markdown("Your professional platform for CME tracking, ATS CVs & career guidance")
+    cols = st.columns(3)
+    cols[0].markdown('<div class="metric-card"><h3>CME Credits</h3><h2>Track progress</h2></div>', unsafe_allow_html=True)
+    cols[1].markdown('<div class="metric-card"><h3>ATS Score</h3><h2>Optimize CV</h2></div>', unsafe_allow_html=True)
+    cols[2].markdown('<div class="metric-card"><h3>AI Advisor</h3><h2>Powered by Grok</h2></div>', unsafe_allow_html=True)
 
-# ====================== CME TRACKER (Persistent) ======================
-elif page == "📊 CME Tracker":
-    st.header("📊 CME Tracker")
-    with st.form("cme_form"):
-        activity = st.text_input("Activity / Conference")
-        credits = st.number_input("Credits", min_value=0.0, step=0.5)
+elif st.session_state.page == "CME Tracker":
+    st.header("CME Credits Tracker")
+
+    with st.form("cme"):
+        act = st.text_input("Activity / Course")
+        cred = st.number_input("Credits", min_value=0.0, step=0.25)
         notes = st.text_area("Notes")
-        if st.form_submit_button("Log Activity"):
-            conn.table("cme_logs").insert({
-                "user_id": user_id,
-                "date": datetime.now().strftime("%Y-%m-%d"),
-                "activity": activity,
-                "credits": credits,
-                "notes": notes
-            }).execute()
-            st.success("Logged & saved to Supabase!")
+        if st.form_submit_button("Log", type="primary"):
+            if act.strip():
+                supabase.table("cme_logs").insert({
+                    "user_id": user_id,
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "activity": act,
+                    "credits": cred,
+                    "notes": notes
+                }).execute()
+                st.success("Logged!")
+                st.rerun()
 
-    # Load user's data
-    data = conn.table("cme_logs").select("*").eq("user_id", user_id).execute().data
-    if data:
-        df = pd.DataFrame(data)
-        st.dataframe(df, use_container_width=True)
+    resp = supabase.table("cme_logs").select("*").eq("user_id", user_id).execute()
+    if resp.data:
+        df = pd.DataFrame(resp.data)
         total = df["credits"].sum()
-        st.metric("Your Total CME Credits", f"{total:.1f}")
+        st.metric("Total CME Credits", f"{total:.1f}")
+        fig = px.bar(df, x="date", y="credits", title="Credits Over Time")
+        st.plotly_chart(fig, use_container_width=True)
+        st.dataframe(df.sort_values("date", ascending=False))
 
-# ====================== CV BUILDER (Saved to Supabase) ======================
-elif page == "📝 CV Builder":
-    st.header("📝 ATS CV Builder")
-    # (same beautiful form as previous version – omitted for brevity but included in full repo)
-    # On save: conn.table("user_cvs").upsert({"user_id": user_id, "cv_data": st.session_state.cv_data}).execute()
+elif st.session_state.page == "CV Builder":
+    st.header("ATS CV Builder")
+    st.info("Form + preview + Word download – expand from your previous version")
 
-# ====================== ATS CHECKER ======================
-elif page == "🔍 ATS Checker":
-    st.header("🔍 ATS Score Checker")
-    # (same gauge code as before)
+    # Add your CV form logic here (name, experience, summary, etc.)
+    # On submit → supabase.table("user_cvs").upsert({"user_id": user_id, "cv_data": your_dict}).execute()
 
-# ====================== AI ADVISOR ======================
-elif page == "🤖 AI Advisor":
-    st.header("🤖 Grok Career Advisor")
-    # (same chat code as before)
+elif st.session_state.page == "ATS Checker":
+    st.header("ATS Score Checker")
+    st.info("Upload CV + job desc → keyword match gauge – add from previous code")
 
-st.caption("Full-Stack MedPro Hub • Streamlit + Supabase • Secure & Persistent")
+elif st.session_state.page == "AI Advisor":
+    st.header("Grok AI Career Advisor")
+    if client:
+        prompt = st.chat_input("Ask career advice...")
+        if prompt:
+            st.chat_message("user").markdown(prompt)
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    try:
+                        res = client.chat.completions.create(
+                            model="grok-beta",
+                            messages=[{"role": "user", "content": prompt}],
+                            temperature=0.7
+                        )
+                        st.markdown(res.choices[0].message.content)
+                    except Exception as e:
+                        st.error(str(e))
+    else:
+        st.warning("Add xAI API key in sidebar")
+
+st.caption("MedPro Hub • Streamlit + Supabase • 2026")
