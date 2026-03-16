@@ -3,52 +3,50 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
-import os
-from PIL import Image
-import io
-import base64
 import time
+import random
 import hashlib
-import hmac
 
 # Page configuration
 st.set_page_config(
-    page_title="Claude-Style App Builder",
-    page_icon="🤖",
+    page_title="AI Healthcare App Builder",
+    page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
+# Custom CSS
 st.markdown("""
 <style>
-    /* Main container styling */
-    .main-header {
+    /* Main styling */
+    .main-title {
         font-size: 3rem;
-        font-weight: 700;
-        background: linear-gradient(90deg, #0d9488 0%, #115e59 100%);
+        font-weight: 800;
+        background: linear-gradient(135deg, #0d9488 0%, #059669 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 1rem;
+        text-align: center;
     }
     
-    .sub-header {
-        font-size: 1.5rem;
+    .sub-title {
+        font-size: 1.2rem;
         color: #4b5563;
+        text-align: center;
         margin-bottom: 2rem;
     }
     
     /* Card styling */
     .feature-card {
         background: white;
-        border-radius: 1rem;
         padding: 1.5rem;
+        border-radius: 1rem;
         box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-        transition: all 0.3s;
         border: 1px solid #e5e7eb;
-        margin-bottom: 1rem;
+        transition: all 0.3s;
+        height: 100%;
     }
     
     .feature-card:hover {
@@ -62,33 +60,22 @@ st.markdown("""
         padding: 1rem;
         border-radius: 1rem;
         margin-bottom: 1rem;
-        animation: slideIn 0.3s ease-out;
+        max-width: 80%;
     }
     
     .user-message {
-        background: linear-gradient(135deg, #0d9488 0%, #115e59 100%);
+        background: linear-gradient(135deg, #0d9488 0%, #059669 100%);
         color: white;
-        margin-left: 20%;
+        margin-left: auto;
     }
     
     .assistant-message {
         background: #f3f4f6;
         color: #1f2937;
-        margin-right: 20%;
+        margin-right: auto;
     }
     
-    @keyframes slideIn {
-        from {
-            opacity: 0;
-            transform: translateY(20px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-    
-    /* Code block styling */
+    /* Code block */
     .code-block {
         background: #1f2937;
         color: #d1d5db;
@@ -100,226 +87,285 @@ st.markdown("""
     
     /* Button styling */
     .stButton > button {
-        background: linear-gradient(90deg, #0d9488 0%, #115e59 100%);
+        background: linear-gradient(135deg, #0d9488 0%, #059669 100%);
         color: white;
         border: none;
-        padding: 0.75rem 2rem;
+        padding: 0.5rem 1.5rem;
         font-weight: 600;
         border-radius: 9999px;
         transition: all 0.3s;
+        width: 100%;
     }
     
     .stButton > button:hover {
-        transform: scale(1.05);
+        transform: scale(1.02);
         box-shadow: 0 10px 15px -3px rgba(13,148,136,0.3);
     }
     
-    /* Sidebar styling */
-    .sidebar-header {
-        font-size: 1.2rem;
-        font-weight: 600;
-        color: #0d9488;
-        margin-bottom: 1rem;
-    }
-    
-    /* Progress bar styling */
-    .stProgress > div > div {
-        background: linear-gradient(90deg, #0d9488 0%, #115e59 100%);
-    }
-    
-    /* Metric styling */
-    .metric-card {
-        background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
-        padding: 1rem;
-        border-radius: 0.5rem;
-        text-align: center;
-    }
-    
-    /* Tool card styling */
-    .tool-card {
-        background: white;
-        border: 1px solid #e5e7eb;
-        border-radius: 0.5rem;
-        padding: 1rem;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    
-    .tool-card:hover {
-        background: #f9fafb;
-        border-color: #0d9488;
-    }
-    
     /* Status indicators */
-    .status-online {
-        color: #10b981;
-        font-size: 0.8rem;
+    .status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
     }
     
-    .status-offline {
-        color: #ef4444;
-        font-size: 0.8rem;
+    .status-success {
+        background: #d1fae5;
+        color: #065f46;
     }
     
-    /* Divider styling */
+    .status-warning {
+        background: #fed7aa;
+        color: #92400e;
+    }
+    
+    /* Divider */
     .custom-divider {
         height: 2px;
         background: linear-gradient(90deg, transparent, #0d9488, transparent);
         margin: 2rem 0;
     }
-    
-    /* Loading animation */
-    .loading-spinner {
-        border: 3px solid #f3f3f3;
-        border-top: 3px solid #0d9488;
-        border-radius: 50%;
-        width: 40px;
-        height: 40px;
-        animation: spin 1s linear infinite;
-    }
-    
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
 </style>
 """, unsafe_allow_html=True)
 
 # Initialize session state
-if 'messages' not in st.session_state:
-    st.session_state.messages = []
-if 'current_project' not in st.session_state:
-    st.session_state.current_project = None
-if 'projects' not in st.session_state:
-    st.session_state.projects = []
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-if 'user' not in st.session_state:
-    st.session_state.user = None
-if 'generated_code' not in st.session_state:
-    st.session_state.generated_code = {}
-if 'conversation_history' not in st.session_state:
-    st.session_state.conversation_history = []
+def init_session_state():
+    """Initialize all session state variables"""
+    defaults = {
+        'messages': [],
+        'projects': [],
+        'current_project': None,
+        'generated_code': {},
+        'templates': [],
+        'user_preferences': {},
+        'conversation_history': [],
+        'app_count': 0,
+        'authenticated': True,  # Always true for demo
+        'theme': 'light',
+        'api_keys_configured': False
+    }
+    
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
-# Simple authentication (replace with your own)
-def check_password():
-    """Returns `True` if the user had the correct password."""
-
-    def password_entered():
-        """Checks whether a password entered by the user is correct."""
-        if hmac.compare_digest(st.session_state["password"], st.secrets["password"]):
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]  # Don't store the password.
-        else:
-            st.session_state["password_correct"] = False
-
-    # Return True if the password is validated.
-    if st.session_state.get("password_correct", False):
-        return True
-
-    # Show input for password.
-    st.text_input(
-        "Password", type="password", on_change=password_entered, key="password"
-    )
-    if "password_correct" in st.session_state:
-        st.error("😕 Password incorrect")
-    return False
-
-# Comment out authentication if not needed
-# if not check_password():
-#     st.stop()
+init_session_state()
 
 # Sidebar
 with st.sidebar:
-    st.markdown('<p class="sidebar-header">🤖 AI App Builder</p>', unsafe_allow_html=True)
+    st.markdown("## 🏥 **AI App Builder**")
+    st.markdown("---")
     
-    # User profile section
+    # User info (simulated)
     col1, col2 = st.columns([1, 3])
     with col1:
-        st.image("https://ui-avatars.com/api/?name=User&background=0d9488&color=fff&size=100", width=50)
+        st.image("https://ui-avatars.com/api/?name=Dr+Smith&background=0d9488&color=fff&size=100", width=50)
     with col2:
-        st.markdown("**Welcome back!**")
-        st.markdown('<span class="status-online">● Online</span>', unsafe_allow_html=True)
+        st.markdown("**Dr. Smith**")
+        st.markdown("Emergency Medicine")
     
-    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+    st.markdown("---")
     
     # Navigation
-    st.markdown("### 🧭 Navigation")
-    pages = ["Chat Assistant", "Project Builder", "Code Generator", "Analytics Dashboard", "Settings"]
-    selected_page = st.radio("", pages, label_visibility="collapsed")
+    st.markdown("### 📋 Menu")
+    page = st.radio(
+        "",
+        ["💬 Chat Assistant", "🏗️ Project Builder", "⚡ Code Generator", "📊 Templates", "⚙️ Settings"],
+        label_visibility="collapsed"
+    )
     
-    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+    st.markdown("---")
     
-    # Recent projects
-    st.markdown("### 📁 Recent Projects")
-    if st.session_state.projects:
-        for project in st.session_state.projects[-3:]:
-            if st.button(f"📄 {project}", key=f"project_{project}", use_container_width=True):
-                st.session_state.current_project = project
-    else:
-        st.info("No projects yet. Start a conversation to create one!")
-    
-    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-    
-    # Quick actions
-    st.markdown("### ⚡ Quick Actions")
+    # Quick stats
+    st.markdown("### 📊 Quick Stats")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("➕ New", use_container_width=True):
-            st.session_state.messages = []
-            st.session_state.current_project = None
-            st.rerun()
+        st.metric("Projects", len(st.session_state.projects))
     with col2:
-        if st.button("💾 Save", use_container_width=True):
-            if st.session_state.current_project:
-                st.success(f"Project '{st.session_state.current_project}' saved!")
-            else:
-                st.warning("No active project to save")
+        st.metric("Messages", len(st.session_state.messages))
     
-    # Stats
-    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-    st.markdown("### 📊 Today's Stats")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Messages", "24", "+12")
-    with col2:
-        st.metric("Tokens", "1.2k", "+450")
-    with col3:
-        st.metric("Projects", "3", "+1")
+    st.markdown("---")
+    
+    # Recent projects
+    if st.session_state.projects:
+        st.markdown("### 📁 Recent Projects")
+        for project in st.session_state.projects[-3:]:
+            if st.button(f"📄 {project}", key=f"proj_{project}", use_container_width=True):
+                st.session_state.current_project = project
+                st.rerun()
+    
+    # New project button
+    if st.button("➕ New Project", use_container_width=True):
+        st.session_state.messages = []
+        st.session_state.current_project = None
+        st.session_state.generated_code = {}
+        st.rerun()
 
 # Main content area
-if selected_page == "Chat Assistant":
-    # Header
-    st.markdown('<h1 class="main-header">AI App Builder Assistant</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Build your healthcare platform with AI assistance</p>', unsafe_allow_html=True)
+if page == "💬 Chat Assistant":
+    st.markdown('<h1 class="main-title">🤖 AI Healthcare Assistant</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-title">Build your healthcare applications with AI guidance</p>', unsafe_allow_html=True)
     
     # Quick prompts
-    st.markdown("### 🚀 Quick Start Prompts")
-    cols = st.columns(4)
+    st.markdown("### 🚀 Quick Start")
+    cols = st.columns(5)
     prompts = [
-        "Create a healthcare dashboard",
-        "Build a CME tracker",
-        "Design a telemedicine UI",
-        "Generate ATS CV template"
+        "Create patient intake form",
+        "Build CME tracker",
+        "Design dashboard",
+        "Generate database schema",
+        "Create API endpoints"
     ]
+    
     for i, col in enumerate(cols):
         with col:
             if st.button(prompts[i], use_container_width=True):
                 st.session_state.messages.append({"role": "user", "content": prompts[i]})
-                # Simulate AI response
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": f"Great! I'll help you {prompts[i].lower()}. Let me generate the code for you..."
-                })
+                
+                # Generate response based on prompt
+                if "patient" in prompts[i].lower():
+                    response = """I'll help you create a patient intake form. Here's a complete Streamlit implementation:
+
+```python
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+
+# Patient Intake Form
+st.title("🏥 Patient Intake Form")
+
+# Create tabs
+tab1, tab2, tab3 = st.tabs(["Patient Info", "Medical History", "Insurance"])
+
+with tab1:
+    with st.form("patient_info"):
+        col1, col2 = st.columns(2)
+        with col1:
+            first_name = st.text_input("First Name")
+            last_name = st.text_input("Last Name")
+            dob = st.date_input("Date of Birth", min_value=datetime(1900,1,1))
+        
+        with col2:
+            phone = st.text_input("Phone Number")
+            email = st.text_input("Email")
+            gender = st.selectbox("Gender", ["Male", "Female", "Other"])
+        
+        address = st.text_area("Address")
+        
+        if st.form_submit_button("Save Patient Info"):
+            st.success(f"Patient {first_name} {last_name} registered successfully!")
+
+with tab2:
+    st.info("Medical history form will appear here")
+
+with tab3:
+    st.info("Insurance information form will appear here")
+
+# Display recent patients
+st.subheader("📋 Recent Patients")
+sample_data = pd.DataFrame({
+    'Name': ['John Doe', 'Jane Smith', 'Bob Johnson'],
+    'Date': ['2024-01-15', '2024-01-14', '2024-01-13'],
+    'Status': ['Completed', 'In Progress', 'Completed']
+})
+st.dataframe(sample_data)
+```"""
+                elif "cme" in prompts[i].lower():
+                    response = """Here's a CME tracker application:
+
+```python
+import streamlit as st
+import pandas as pd
+from datetime import datetime, timedelta
+
+# CME Credits Tracker
+st.title("📚 CME Credits Tracker")
+
+# Initialize session state for storing CME records
+if 'cme_records' not in st.session_state:
+    st.session_state.cme_records = [
+        {
+            'course': 'Advanced Cardiac Life Support',
+            'provider': 'American Heart Association',
+            'credits': 8.0,
+            'date': '2024-01-15',
+            'expiry': '2026-01-15',
+            'status': 'Active'
+        },
+        {
+            'course': 'Pediatric Advanced Life Support',
+            'provider': 'American Academy of Pediatrics',
+            'credits': 6.5,
+            'date': '2023-11-20',
+            'expiry': '2025-11-20',
+            'status': 'Active'
+        }
+    ]
+
+# Display metrics
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    st.metric("Total Credits", "14.5", "+2.5")
+with col2:
+    st.metric("Active Courses", "2", "0")
+with col3:
+    st.metric("Expiring Soon", "1", "⚠️")
+with col4:
+    st.metric("Compliance", "85%", "+5%")
+
+# Add new CME record
+with st.expander("➕ Add New CME Record"):
+    with st.form("new_cme"):
+        col1, col2 = st.columns(2)
+        with col1:
+            course = st.text_input("Course Name")
+            provider = st.text_input("Provider")
+            credits = st.number_input("Credits", min_value=0.0, step=0.5)
+        with col2:
+            date = st.date_input("Completion Date")
+            expiry = st.date_input("Expiry Date")
+        
+        if st.form_submit_button("Add Record"):
+            st.session_state.cme_records.append({
+                'course': course,
+                'provider': provider,
+                'credits': credits,
+                'date': str(date),
+                'expiry': str(expiry),
+                'status': 'Active'
+            })
+            st.success("CME record added!")
+
+# Display records
+st.subheader("📋 Your CME Records")
+if st.session_state.cme_records:
+    df = pd.DataFrame(st.session_state.cme_records)
+    st.dataframe(df, use_container_width=True)
+    
+    # Export option
+    if st.button("📥 Export to CSV"):
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="Download CSV",
+            data=csv,
+            file_name=f"cme_records_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
+```"""
+                else:
+                    response = f"I'll help you {prompts[i].lower()}. Here's a template to get started. Would you like me to add more specific features?"
+                
+                st.session_state.messages.append({"role": "assistant", "content": response})
                 st.rerun()
     
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
-    # Chat container
+    # Chat history
     chat_container = st.container()
     
     with chat_container:
-        # Display messages
         for message in st.session_state.messages:
             if message["role"] == "user":
                 st.markdown(f"""
@@ -330,170 +376,107 @@ if selected_page == "Chat Assistant":
             else:
                 st.markdown(f"""
                 <div class="chat-message assistant-message">
-                    <strong>AI Assistant:</strong> {message["content"]}
+                    <strong>AI Assistant:</strong> 
                 </div>
                 """, unsafe_allow_html=True)
-        
-        # Code display if available
-        if st.session_state.generated_code:
-            with st.expander("📝 View Generated Code", expanded=True):
-                for filename, code in st.session_state.generated_code.items():
-                    st.markdown(f"**{filename}**")
-                    st.code(code, language="python")
-                    
-                    # Download button
-                    st.download_button(
-                        label=f"📥 Download {filename}",
-                        data=code,
-                        file_name=filename,
-                        mime="text/plain",
-                        key=f"download_{filename}"
-                    )
+                
+                # Handle code blocks in response
+                if "```python" in message["content"]:
+                    parts = message["content"].split("```python")
+                    st.markdown(parts[0])
+                    if len(parts) > 1:
+                        code_parts = parts[1].split("```")
+                        if len(code_parts) > 0:
+                            st.code(code_parts[0], language="python")
+                            if len(code_parts) > 1:
+                                st.markdown(code_parts[1])
+                else:
+                    st.markdown(message["content"])
     
     # Chat input
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
     col1, col2 = st.columns([5, 1])
     with col1:
-        user_input = st.text_input("Type your message...", key="user_input", label_visibility="collapsed")
+        user_input = st.text_input("Type your message...", key="chat_input", label_visibility="collapsed")
     with col2:
-        send_button = st.button("📤 Send", use_container_width=True)
+        send = st.button("📤 Send", use_container_width=True)
     
-    if send_button and user_input:
-        # Add user message
+    if send and user_input:
         st.session_state.messages.append({"role": "user", "content": user_input})
         
-        # Simulate AI thinking
+        # Simulate AI response
         with st.spinner("AI is thinking..."):
-            time.sleep(1.5)
+            time.sleep(1)
             
-            # Generate response based on input
             if "dashboard" in user_input.lower():
-                response = """I'll create a healthcare dashboard for you. Here's the code:
+                response = """Here's a healthcare dashboard component:
 
 ```python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import numpy as np
 
 # Healthcare Dashboard
-st.title("🏥 Healthcare Analytics Dashboard")
+st.title("🏥 Clinical Dashboard")
 
-# Metrics
+# Generate sample data
+np.random.seed(42)
+dates = pd.date_range(start='2024-01-01', end='2024-01-31', freq='D')
+patients = np.random.randint(20, 50, size=len(dates))
+appointments = np.random.randint(15, 40, size=len(dates))
+
+# Metrics row
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.metric("Patients", "1,234", "+123")
+    st.metric("Total Patients", "1,234", "+123")
 with col2:
-    st.metric("Appointments", "89", "+12")
+    st.metric("Today's Appointments", "28", "+5")
 with col3:
-    st.metric("CME Credits", "456", "+45")
+    st.metric("Wait Time", "12 min", "-3 min")
 with col4:
-    st.metric("Licenses", "3", "0")
+    st.metric("Satisfaction", "94%", "+2%")
 
-# Patient demographics chart
-data = pd.DataFrame({
-    'Age Group': ['0-18', '19-35', '36-50', '51-65', '65+'],
-    'Count': [150, 320, 280, 190, 110]
-})
-fig = px.bar(data, x='Age Group', y='Count', title='Patient Demographics')
-st.plotly_chart(fig)
-```"""
-            elif "cme" in user_input.lower():
-                response = """I'll build a CME tracker for you:
+# Create tabs
+tab1, tab2, tab3 = st.tabs(["📊 Analytics", "📅 Schedule", "👥 Patients"])
 
-```python
-import streamlit as st
-import pandas as pd
-from datetime import datetime, timedelta
-
-# CME Tracker
-st.title("📚 CME Credits Tracker")
-
-# Initialize session state
-if 'cme_records' not in st.session_state:
-    st.session_state.cme_records = []
-
-# Add new CME record
-with st.expander("➕ Add New CME Record"):
-    col1, col2 = st.columns(2)
-    with col1:
-        title = st.text_input("Course Title")
-        provider = st.text_input("Provider")
-        credits = st.number_input("Credits", min_value=0.0, step=0.5)
-    with col2:
-        date = st.date_input("Completion Date")
-        expiry = st.date_input("Expiry Date")
+with tab1:
+    # Patient volume chart
+    df = pd.DataFrame({
+        'Date': dates,
+        'Patients': patients,
+        'Appointments': appointments
+    })
     
-    if st.button("Add Record"):
-        st.session_state.cme_records.append({
-            'title': title,
-            'provider': provider,
-            'credits': credits,
-            'date': date,
-            'expiry': expiry
-        })
-        st.success("Record added!")
-
-# Display records
-if st.session_state.cme_records:
-    df = pd.DataFrame(st.session_state.cme_records)
-    st.dataframe(df)
+    fig = px.line(df, x='Date', y=['Patients', 'Appointments'], 
+                  title='Daily Patient Volume')
+    st.plotly_chart(fig, use_container_width=True)
     
-    # Summary metrics
-    total_credits = df['credits'].sum()
-    st.metric("Total CME Credits", total_credits)
-```"""
-            elif "telemedicine" in user_input.lower():
-                response = """Here's a telemedicine UI component:
+    # Department distribution
+    depts = ['Emergency', 'Cardiology', 'Pediatrics', 'Surgery', 'Orthopedics']
+    counts = np.random.randint(50, 200, size=5)
+    df_depts = pd.DataFrame({'Department': depts, 'Count': counts})
+    
+    fig2 = px.pie(df_depts, values='Count', names='Department', 
+                  title='Patients by Department')
+    st.plotly_chart(fig2, use_container_width=True)
 
-```python
-import streamlit as st
-import time
+with tab2:
+    st.info("Schedule view coming soon...")
 
-# Telemedicine Interface
-st.title("📹 Telemedicine Consultation")
-
-# Doctor info
-col1, col2, col3 = st.columns([1,2,1])
-with col1:
-    st.image("https://via.placeholder.com/150", caption="Dr. Smith")
-with col2:
-    st.markdown("### Dr. Sarah Johnson")
-    st.markdown("Cardiologist • Available Now")
-with col3:
-    if st.button("📞 Start Call"):
-        st.info("Connecting...")
-
-# Consultation controls
-st.markdown("---")
-col1, col2, col3, col4, col5 = st.columns(5)
-with col1:
-    st.button("🎥 Camera")
-with col2:
-    st.button("🎤 Mic")
-with col3:
-    st.button("📋 Notes")
-with col4:
-    st.button("💊 Prescribe")
-with col5:
-    st.button("📊 Share Screen")
-
-# Patient info
-with st.expander("Patient Information"):
-    st.markdown("**Name:** John Doe")
-    st.markdown("**Age:** 45")
-    st.markdown("**Chief Complaint:** Chest pain")
-    st.markdown("**Vitals:** BP 120/80, HR 72")
+with tab3:
+    st.info("Patient list coming soon...")
 ```"""
             else:
-                response = "I understand you want to build a healthcare application. Could you provide more details about what specific features you need?"
+                response = "I understand. Could you provide more details about what you'd like to build? I can help with patient forms, CME tracking, dashboards, database schemas, and more."
             
             st.session_state.messages.append({"role": "assistant", "content": response})
-        
-        st.rerun()
+            st.rerun()
 
-elif selected_page == "Project Builder":
-    st.markdown('<h1 class="main-header">📱 Project Builder</h1>', unsafe_allow_html=True)
+elif page == "🏗️ Project Builder":
+    st.markdown('<h1 class="main-title">🏗️ Project Builder</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-title">Configure and generate complete healthcare applications</p>', unsafe_allow_html=True)
     
     col1, col2 = st.columns([1, 1])
     
@@ -501,24 +484,28 @@ elif selected_page == "Project Builder":
         st.markdown("### Project Configuration")
         
         # Project details
-        project_name = st.text_input("Project Name", value=st.session_state.current_project or "Healthcare App")
+        project_name = st.text_input("Project Name", value="My Healthcare App")
         project_type = st.selectbox(
             "Project Type",
-            ["Healthcare Dashboard", "CME Tracker", "Telemedicine Platform", "License Management", "Job Board"]
+            ["Patient Management System", "CME Tracker", "Telemedicine Platform", 
+             "Hospital Dashboard", "License Manager", "Job Board"]
         )
         
-        st.markdown("### Features")
+        st.markdown("### Select Features")
         features = st.multiselect(
-            "Select Features",
-            ["User Authentication", "Database Integration", "Analytics", "File Upload", "Email Notifications", "Payment Processing"],
-            default=["User Authentication", "Database Integration"]
+            "",
+            ["User Authentication", "Patient Records", "Appointment Scheduling",
+             "CME Tracking", "License Management", "Analytics Dashboard",
+             "Export/Reports", "Email Notifications", "PDF Generation"],
+            default=["Patient Records", "Appointment Scheduling", "Analytics Dashboard"]
         )
         
-        st.markdown("### Tech Stack")
+        st.markdown("### Choose Tech Stack")
         tech_stack = st.multiselect(
-            "Choose Technologies",
-            ["Streamlit", "FastAPI", "Supabase", "PostgreSQL", "Plotly", "Pandas", "OpenCV"],
-            default=["Streamlit", "Supabase", "Pandas"]
+            "",
+            ["Streamlit", "FastAPI", "PostgreSQL", "MongoDB", "Plotly", 
+             "Pandas", "SQLAlchemy", "Docker"],
+            default=["Streamlit", "Pandas", "Plotly"]
         )
         
         if st.button("🚀 Generate Project", use_container_width=True):
@@ -528,480 +515,152 @@ elif selected_page == "Project Builder":
             
             # Generate project files
             st.session_state.generated_code = {
-                "app.py": f"""# {project_name}
+                "app.py": f'''"""Healthcare Application - {project_name}
+Generated by AI App Builder
+"""
+
 import streamlit as st
 import pandas as pd
-from supabase import create_client
 import plotly.express as px
+from datetime import datetime
+import hashlib
 
-# Initialize Supabase
-supabase_url = st.secrets["SUPABASE_URL"]
-supabase_key = st.secrets["SUPABASE_KEY"]
-supabase = create_client(supabase_url, supabase_key)
+# Page configuration
+st.set_page_config(
+    page_title="{project_name}",
+    page_icon="🏥",
+    layout="wide"
+)
 
-st.title("{project_name}")
+# Custom CSS
+st.markdown("""
+<style>
+    .main-header {{
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #0d9488;
+        text-align: center;
+        margin-bottom: 2rem;
+    }}
+    .feature-card {{
+        background: white;
+        padding: 1.5rem;
+        border-radius: 1rem;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        border: 1px solid #e5e7eb;
+        margin-bottom: 1rem;
+    }}
+</style>
+""", unsafe_allow_html=True)
 
-# Your generated code here...
-""",
+# Initialize session state
+if 'patients' not in st.session_state:
+    st.session_state.patients = []
+if 'appointments' not in st.session_state:
+    st.session_state.appointments = []
+
+# Main app
+def main():
+    st.markdown('<h1 class="main-header">{project_name}</h1>', unsafe_allow_html=True)
+    
+    # Sidebar navigation
+    st.sidebar.title("Navigation")
+    page = st.sidebar.radio(
+        "Go to",
+        ["Dashboard", "Patients", "Appointments", "Reports", "Settings"]
+    )
+    
+    if page == "Dashboard":
+        show_dashboard()
+    elif page == "Patients":
+        show_patients()
+    elif page == "Appointments":
+        show_appointments()
+    elif page == "Reports":
+        show_reports()
+    elif page == "Settings":
+        show_settings()
+
+def show_dashboard():
+    st.header("Dashboard")
+    
+    # Metrics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Patients", len(st.session_state.patients), "+5")
+    with col2:
+        st.metric("Appointments", len(st.session_state.appointments), "+2")
+    with col3:
+        st.metric("Today", "8", "-3")
+    with col4:
+        st.metric("Completion", "75%", "+5%")
+    
+    # Sample chart
+    data = pd.DataFrame({{
+        'Month': ['Jan', 'Feb', 'Mar', 'Apr', 'May'],
+        'Patients': [45, 52, 48, 63, 58]
+    }})
+    fig = px.line(data, x='Month', y='Patients', title='Patient Volume')
+    st.plotly_chart(fig, use_container_width=True)
+
+def show_patients():
+    st.header("Patient Records")
+    
+    # Add patient form
+    with st.expander("➕ Add New Patient"):
+        with st.form("new_patient"):
+            col1, col2 = st.columns(2)
+            with col1:
+                name = st.text_input("Full Name")
+                age = st.number_input("Age", 0, 120)
+                gender = st.selectbox("Gender", ["Male", "Female", "Other"])
+            with col2:
+                phone = st.text_input("Phone")
+                email = st.text_input("Email")
+            
+            if st.form_submit_button("Save Patient"):
+                st.session_state.patients.append({{
+                    "name": name,
+                    "age": age,
+                    "gender": gender,
+                    "phone": phone,
+                    "email": email,
+                    "date": datetime.now().strftime("%Y-%m-%d")
+                }})
+                st.success("Patient added!")
+    
+    # Display patients
+    if st.session_state.patients:
+        df = pd.DataFrame(st.session_state.patients)
+        st.dataframe(df, use_container_width=True)
+
+def show_appointments():
+    st.header("Appointments")
+    st.info("Appointment management coming soon...")
+
+def show_reports():
+    st.header("Reports")
+    st.info("Reports and analytics coming soon...")
+
+def show_settings():
+    st.header("Settings")
+    st.info("Settings configuration coming soon...")
+
+if __name__ == "__main__":
+    main()''',
                 "requirements.txt": """streamlit==1.28.0
 pandas==2.0.3
 plotly==5.17.0
-supabase==1.2.0
+numpy==1.24.3
 python-dotenv==1.0.0""",
                 "README.md": f"""# {project_name}
 
-A healthcare application built with AI assistance.
+A healthcare application built with Streamlit.
 
 ## Features
 {chr(10).join(['- ' + f for f in features])}
-
-## Tech Stack
-{chr(10).join(['- ' + t for t in tech_stack])}
 
 ## Installation
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
-```"""
-            }
-            
-            st.success(f"Project '{project_name}' generated successfully!")
-    
-    with col2:
-        st.markdown("### Project Preview")
-        
-        if st.session_state.current_project:
-            st.markdown(f"**Current Project:** {st.session_state.current_project}")
-            st.markdown(f"**Type:** {project_type}")
-            st.markdown(f"**Features:** {', '.join(features) if features else 'None'}")
-            
-            # Progress indicator
-            st.markdown("### Development Progress")
-            progress = len(features) * 10
-            st.progress(min(progress, 100) / 100)
-            
-            # Next steps
-            st.markdown("### Next Steps")
-            steps = [
-                "✅ Configure Supabase database",
-                "⬜ Set up authentication",
-                "⬜ Create database tables",
-                "⬜ Build user interface",
-                "⬜ Implement analytics"
-            ]
-            for step in steps:
-                st.markdown(step)
-        else:
-            st.info("Configure and generate a project to see preview")
-
-elif selected_page == "Code Generator":
-    st.markdown('<h1 class="main-header">⚡ Code Generator</h1>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("### Generate Code")
-        
-        code_type = st.selectbox(
-            "Code Type",
-            ["Streamlit App", "Supabase Integration", "Database Schema", "API Endpoints", "Authentication", "Data Visualization"]
-        )
-        
-        description = st.text_area(
-            "Describe what you want to build",
-            height=150,
-            placeholder="Example: Create a patient intake form with name, age, symptoms, and store in Supabase"
-        )
-        
-        if st.button("🔨 Generate Code", use_container_width=True):
-            with st.spinner("Generating code..."):
-                time.sleep(2)
-                
-                if code_type == "Streamlit App":
-                    code = """import streamlit as st
-import pandas as pd
-from datetime import datetime
-
-# Page config
-st.set_page_config(page_title="Healthcare App", page_icon="🏥")
-
-# Title
-st.title("Patient Intake Form")
-
-# Form
-with st.form("patient_intake"):
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        name = st.text_input("Full Name")
-        age = st.number_input("Age", min_value=0, max_value=120)
-        gender = st.selectbox("Gender", ["Male", "Female", "Other"])
-    
-    with col2:
-        phone = st.text_input("Phone Number")
-        email = st.text_input("Email")
-        visit_date = st.date_input("Visit Date", datetime.now())
-    
-    symptoms = st.text_area("Chief Complaint / Symptoms")
-    
-    submitted = st.form_submit_button("Submit")
-    
-    if submitted:
-        # Save to database
-        st.success(f"Patient {name} registered successfully!")
-        
-        # Display summary
-        st.subheader("Patient Summary")
-        st.json({
-            "name": name,
-            "age": age,
-            "gender": gender,
-            "phone": phone,
-            "email": email,
-            "visit_date": str(visit_date),
-            "symptoms": symptoms
-        })"""
-                
-                elif code_type == "Supabase Integration":
-                    code = """from supabase import create_client
-import streamlit as st
-
-# Initialize Supabase client
-@st.cache_resource
-def init_supabase():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
-
-supabase = init_supabase()
-
-# CRUD Operations
-def create_patient(data):
-    """Create a new patient record"""
-    result = supabase.table("patients").insert(data).execute()
-    return result.data
-
-def get_patient(patient_id):
-    """Get patient by ID"""
-    result = supabase.table("patients").select("*").eq("id", patient_id).execute()
-    return result.data[0] if result.data else None
-
-def get_all_patients():
-    """Get all patients"""
-    result = supabase.table("patients").select("*").execute()
-    return result.data
-
-def update_patient(patient_id, updates):
-    """Update patient record"""
-    result = supabase.table("patients").update(updates).eq("id", patient_id).execute()
-    return result.data
-
-def delete_patient(patient_id):
-    """Delete patient record"""
-    result = supabase.table("patients").delete().eq("id", patient_id).execute()
-    return result.data
-
-# Example usage in Streamlit
-def main():
-    st.title("Patient Management System")
-    
-    # Create form
-    with st.form("new_patient"):
-        name = st.text_input("Name")
-        age = st.number_input("Age")
-        if st.form_submit_button("Save"):
-            data = {"name": name, "age": age}
-            result = create_patient(data)
-            st.success(f"Patient {name} created with ID: {result[0]['id']}")
-    
-    # Display patients
-    patients = get_all_patients()
-    if patients:
-        st.dataframe(patients)
-
-if __name__ == "__main__":
-    main()"""
-                
-                elif code_type == "Database Schema":
-                    code = """-- Healthcare Database Schema for Supabase
-
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- Patients table
-CREATE TABLE patients (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    full_name TEXT NOT NULL,
-    date_of_birth DATE,
-    gender TEXT,
-    phone TEXT,
-    email TEXT UNIQUE,
-    address TEXT,
-    emergency_contact TEXT,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Medical Records table
-CREATE TABLE medical_records (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    patient_id UUID REFERENCES patients(id) ON DELETE CASCADE,
-    record_date DATE DEFAULT NOW(),
-    diagnosis TEXT,
-    treatment TEXT,
-    notes TEXT,
-    physician TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Appointments table
-CREATE TABLE appointments (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    patient_id UUID REFERENCES patients(id) ON DELETE CASCADE,
-    appointment_date TIMESTAMP NOT NULL,
-    duration_minutes INTEGER DEFAULT 30,
-    status TEXT DEFAULT 'scheduled',
-    reason TEXT,
-    notes TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
--- CME Credits table
-CREATE TABLE cme_credits (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    physician_id UUID REFERENCES auth.users(id),
-    course_name TEXT NOT NULL,
-    provider TEXT,
-    credits DECIMAL(5,2),
-    completion_date DATE,
-    expiry_date DATE,
-    certificate_url TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Licenses table
-CREATE TABLE licenses (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    physician_id UUID REFERENCES auth.users(id),
-    license_number TEXT,
-    jurisdiction TEXT,
-    issue_date DATE,
-    expiry_date DATE,
-    status TEXT DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Enable Row Level Security
-ALTER TABLE patients ENABLE ROW LEVEL SECURITY;
-ALTER TABLE medical_records ENABLE ROW LEVEL SECURITY;
-ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE cme_credits ENABLE ROW LEVEL SECURITY;
-ALTER TABLE licenses ENABLE ROW LEVEL SECURITY;
-
--- Create policies
-CREATE POLICY "Users can view own patients" ON patients 
-    FOR SELECT USING (auth.uid() = physician_id);
-
-CREATE POLICY "Users can insert patients" ON patients 
-    FOR INSERT WITH CHECK (auth.uid() = physician_id);
-
--- Create indexes
-CREATE INDEX idx_patients_email ON patients(email);
-CREATE INDEX idx_appointments_date ON appointments(appointment_date);
-CREATE INDEX idx_medical_records_patient ON medical_records(patient_id);
-"""
-                
-                st.session_state.generated_code = {"generated_code.py": code}
-                st.rerun()
-    
-    with col2:
-        st.markdown("### Templates")
-        templates = {
-            "🏥 Patient Intake": "Form with patient registration",
-            "📊 Analytics Dashboard": "Healthcare metrics visualization",
-            "📅 Appointment Scheduler": "Calendar and booking system",
-            "💊 Prescription Manager": "Medication tracking",
-            "📚 CME Tracker": "Education credits manager"
-        }
-        
-        for template, desc in templates.items():
-            with st.container():
-                st.markdown(f"""
-                <div class="tool-card">
-                    <strong>{template}</strong>
-                    <p style="color: #6b7280; font-size: 0.9rem;">{desc}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                if st.button(f"Use Template", key=f"template_{template}"):
-                    st.info(f"Loading {template} template...")
-
-elif selected_page == "Analytics Dashboard":
-    st.markdown('<h1 class="main-header">📊 Analytics Dashboard</h1>', unsafe_allow_html=True)
-    
-    # Generate sample data
-    np.random.seed(42)
-    
-    # Metrics row
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.markdown("""
-        <div class="metric-card">
-            <h3 style="color: #6b7280; font-size: 0.9rem;">Total Users</h3>
-            <p style="font-size: 2rem; font-weight: bold; color: #0d9488;">1,234</p>
-            <p style="color: #10b981;">↑ 12.3%</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("""
-        <div class="metric-card">
-            <h3 style="color: #6b7280; font-size: 0.9rem;">Active Projects</h3>
-            <p style="font-size: 2rem; font-weight: bold; color: #0d9488;">45</p>
-            <p style="color: #10b981;">↑ 8.1%</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown("""
-        <div class="metric-card">
-            <h3 style="color: #6b7280; font-size: 0.9rem;">Code Generations</h3>
-            <p style="font-size: 2rem; font-weight: bold; color: #0d9488;">892</p>
-            <p style="color: #ef4444;">↓ 2.4%</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col4:
-        st.markdown("""
-        <div class="metric-card">
-            <h3 style="color: #6b7280; font-size: 0.9rem;">Success Rate</h3>
-            <p style="font-size: 2rem; font-weight: bold; color: #0d9488;">94%</p>
-            <p style="color: #10b981;">↑ 5.2%</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-    
-    # Charts
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### Usage Over Time")
-        # Generate sample time series data
-        dates = pd.date_range(start='2024-01-01', end='2024-03-01', freq='D')
-        values = np.random.randint(50, 150, size=len(dates))
-        df = pd.DataFrame({'Date': dates, 'Usage': values})
-        
-        fig = px.line(df, x='Date', y='Usage', title='Daily Active Users')
-        fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.markdown("### Project Types")
-        # Generate sample pie chart data
-        project_types = ['Healthcare Dashboard', 'CME Tracker', 'Telemedicine', 'License Manager', 'Job Board']
-        counts = np.random.randint(10, 50, size=len(project_types))
-        df_pie = pd.DataFrame({'Type': project_types, 'Count': counts})
-        
-        fig = px.pie(df_pie, values='Count', names='Type', title='Projects by Type')
-        fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-    
-    # Recent activity
-    st.markdown("### Recent Activity")
-    
-    activity_data = {
-        'Time': ['2 min ago', '15 min ago', '1 hour ago', '3 hours ago', '5 hours ago'],
-        'User': ['john@example.com', 'sarah@hospital.com', 'mike@clinic.org', 'emma@health.org', 'david@med.com'],
-        'Action': ['Generated CME Tracker', 'Created Dashboard', 'Uploaded Schema', 'Built API', 'Deployed App'],
-        'Status': ['✅ Success', '✅ Success', '⚠️ Warning', '✅ Success', '❌ Failed']
-    }
-    
-    df_activity = pd.DataFrame(activity_data)
-    st.dataframe(df_activity, use_container_width=True)
-
-elif selected_page == "Settings":
-    st.markdown('<h1 class="main-header">⚙️ Settings</h1>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        st.markdown("### Profile Settings")
-        
-        with st.form("profile_settings"):
-            name = st.text_input("Display Name", value="Dr. Sarah Johnson")
-            email = st.text_input("Email", value="sarah@healthcare.com")
-            specialty = st.selectbox("Specialty", ["Emergency Medicine", "Cardiology", "Pediatrics", "Surgery", "Internal Medicine"])
-            
-            st.markdown("### Preferences")
-            theme = st.selectbox("Theme", ["Light", "Dark", "System"])
-            language = st.selectbox("Language", ["English", "Spanish", "French", "German"])
-            
-            if st.form_submit_button("Save Settings"):
-                st.success("Settings saved successfully!")
-    
-    with col2:
-        st.markdown("### API Configuration")
-        
-        with st.form("api_settings"):
-            st.text_input("Supabase URL", value="https://your-project.supabase.co", type="default")
-            st.text_input("Supabase Anon Key", value="••••••••••••••••", type="password")
-            st.text_input("OpenAI API Key", value="", type="password")
-            
-            st.markdown("### Model Preferences")
-            model = st.selectbox("Default Model", ["GPT-4", "Claude-3", "Gemini Pro", "Llama 3"])
-            temperature = st.slider("Temperature", 0.0, 1.0, 0.7)
-            max_tokens = st.number_input("Max Tokens", 100, 4000, 2000)
-            
-            if st.form_submit_button("Update API Settings"):
-                st.success("API settings updated!")
-    
-    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-    
-    # Danger zone
-    st.markdown("### ⚠️ Danger Zone")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("🗑️ Clear All Projects", use_container_width=True):
-            st.session_state.projects = []
-            st.session_state.current_project = None
-            st.warning("All projects cleared!")
-    
-    with col2:
-        if st.button("🔄 Reset Settings", use_container_width=True):
-            st.info("Settings reset to default")
-    
-    with col3:
-        if st.button("📤 Export Data", use_container_width=True):
-            # Create export data
-            export_data = {
-                "projects": st.session_state.projects,
-                "messages": st.session_state.messages,
-                "timestamp": str(datetime.now())
-            }
-            
-            # Convert to JSON
-            json_str = json.dumps(export_data, indent=2)
-            
-            st.download_button(
-                label="📥 Download Export",
-                data=json_str,
-                file_name=f"export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json"
-            )
-
-# Footer
-st.markdown("---")
-st.markdown(
-    """
-    <div style="text-align: center; color: #6b7280; padding: 2rem;">
-        <p>Built with ❤️ for healthcare professionals</p>
-        <p style="font-size: 0.8rem;">© 2024 AI App Builder | Powered by Streamlit</p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
