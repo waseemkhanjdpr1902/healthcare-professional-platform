@@ -1,7 +1,7 @@
-streamlit
+streamlit>=1.38.0
+supabase
 openai
 PyPDF2
 python-docx
 pandas
 plotly
-st-supabase-connection
