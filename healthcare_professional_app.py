@@ -22,10 +22,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ====================== SUPABASE CONNECTION ======================
-@st.cache_resource
 def get_supabase():
     return st.connection("supabase", type=SupabaseConnection)
-
 conn = get_supabase()
 
 # ====================== SESSION STATE ======================
